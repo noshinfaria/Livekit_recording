@@ -1,0 +1,210 @@
+from dotenv import load_dotenv
+import os
+import time
+import jwt
+import httpx
+
+from livekit import agents
+from livekit.agents import AgentSession, Agent, RoomInputOptions
+from livekit.plugins import (
+    openai,
+    cartesia,
+    deepgram,
+    noise_cancellation,
+    silero,
+)
+from livekit.plugins.turn_detector.multilingual import MultilingualModel
+
+load_dotenv()
+
+
+class Assistant(Agent):
+    def __init__(self) -> None:
+        super().__init__(instructions="You are a helpful voice AI assistant.")
+
+
+
+def generate_egress_token():
+    api_key = os.environ["LIVEKIT_EGRESS_API_KEY"]
+    api_secret = os.environ["LIVEKIT_EGRESS_API_SECRET"]
+    now = int(time.time())
+
+    payload = {
+        "iss": api_key,
+        "exp": now + 60 * 5,
+        "sub": "egress",
+        "video": {
+            "egress": True
+        }
+    }
+
+    return jwt.encode(payload, api_secret, algorithm="HS256")
+
+
+# async def start_egress(room_name: str):
+#     token = generate_egress_token()
+
+#     egress_url = os.environ["LIVEKIT_EGRESS_URL"]
+#     headers = {
+#         "Authorization": f"Bearer {token}"
+#     }
+
+#     payload = {
+#         "room_name": room_name,
+#         "layout": "grid",
+#         "audio_only": True,
+#         "file_outputs": [
+#             {
+#                 "type": "s3",
+#                 "path": f"recordings/{room_name}.mp4",
+#                 "s3": {
+#                     "access_key": os.environ["E2_ACCESS_KEY"],
+#                     "secret": os.environ["E2_SECRET_KEY"],
+#                     "bucket": os.environ["E2_BUCKET"],
+#                     "region": os.environ["E2_REGION"],
+#                     "endpoint": os.environ["E2_ENDPOINT"],
+#                     "force_path_style": True
+#                 }
+#             }
+#         ]
+#     }
+
+#     async with httpx.AsyncClient() as client:
+#         response = await client.post(egress_url, headers=headers, json=payload)
+
+#         print(f"Egress start status: {response.status_code}")
+#         try:
+#             print("Egress response JSON:", response.json())
+#         except Exception:
+#             print("Egress response text:", response.text)
+
+
+
+
+async def start_egress(room_name: str):
+    token = generate_egress_token()
+
+    egress_url =os.environ["LIVEKIT_EGRESS_URL"]
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+
+    payload = {
+        "room_composite": {
+            "room_name": room_name,
+            "layout": "grid",
+            "audio_only": True
+        },
+        "output": {
+            "type": "s3",
+            "s3": {
+                "access_key": os.environ["E2_ACCESS_KEY"],
+                "secret": os.environ["E2_SECRET_KEY"],
+                "bucket": os.environ["E2_BUCKET"],
+                "region": os.environ["E2_REGION"],
+                "endpoint": os.environ["E2_ENDPOINT"],
+                "force_path_style": True,
+                "filename_prefix": "recordings/"
+            }
+        }
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(egress_url, headers=headers, json=payload)
+
+        print(f"Egress start status: {response.status_code}")
+        try:
+            data = response.json()
+            print("Egress response JSON:", data)
+            return data.get("egress_id")
+        except Exception:
+            print("Egress response text:", response.text)
+            return None
+            
+
+async def stop_egress(egress_id: str):
+    token = generate_egress_token()
+    stop_url = f"{os.environ['LIVEKIT_EGRESS_URL']}/{egress_id}/stop"
+
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(stop_url, headers=headers)
+        print(f"Egress stop status: {response.status_code}")
+        try:
+            print("Egress stop response JSON:", response.json())
+        except Exception:
+            print("Egress stop response text:", response.text)
+
+
+
+async def entrypoint(ctx: agents.JobContext):
+    egress_id = None
+
+    try:
+        egress_id = await start_egress(ctx.room.name)
+
+        session = AgentSession(
+            stt=deepgram.STT(model="nova-3", language="multi"),
+            llm=openai.LLM(model="gpt-4o-mini"),
+            tts=cartesia.TTS(model="sonic-2", voice="f786b574-daa5-4673-aa0c-cbe3e8534c02"),
+            vad=silero.VAD.load(),
+            turn_detection=MultilingualModel(),
+        )
+
+        await session.start(
+            room=ctx.room,
+            agent=Assistant(),
+            room_input_options=RoomInputOptions(
+                noise_cancellation=noise_cancellation.BVC(),
+            ),
+        )
+
+        await ctx.connect()
+
+        await session.generate_reply(
+            instructions="Greet the user and offer your assistance."
+        )
+
+    finally:
+        # Safely attempt to stop egress only if started
+        if egress_id:
+            await stop_egress(egress_id)
+
+
+
+# # Main entrypoint for the voice agent
+# async def entrypoint(ctx: agents.JobContext):
+#     await start_egress(ctx.room.name)
+
+#     session = AgentSession(
+#         stt=deepgram.STT(model="nova-3", language="multi"),
+#         llm=openai.LLM(model="gpt-4o-mini"),
+#         tts=cartesia.TTS(model="sonic-2", voice="f786b574-daa5-4673-aa0c-cbe3e8534c02"),
+#         vad=silero.VAD.load(),
+#         turn_detection=MultilingualModel(),
+#     )
+
+#     try:
+#         await session.start(
+#             room=ctx.room,
+#             agent=Assistant(),
+#             room_input_options=RoomInputOptions(
+#                 noise_cancellation=noise_cancellation.BVC(),
+#             ),
+#         )
+
+#         await ctx.connect()
+
+#         await session.generate_reply(
+#             instructions="Greet the user and offer your assistance."
+#         )
+#     finally:
+#         if egress_id:
+#             await stop_egress(egress_id)
+
+
+if __name__ == "__main__":
+    agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))
