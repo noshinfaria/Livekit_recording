@@ -5,7 +5,7 @@ import json
 import boto3
 from botocore.client import Config
 import logging
-
+import os
 from livekit import agents, api
 from livekit.agents import AgentSession, Agent, RoomInputOptions, metrics, MetricsCollectedEvent
 from livekit.plugins import (
@@ -50,14 +50,14 @@ async def entrypoint(ctx: agents.JobContext):
         room_name=ctx.room.name,
         audio_only=True,
         file_outputs=[api.EncodedFileOutput(
-            file_type=api.EncodedFileType.OGG,
-            filepath="livekit/my-room-test.ogg",
+            file_type=api.EncodedFileType.MP4,
+            filepath=f"{ctx.room.name}.mp4",
             s3=api.S3Upload(
-                bucket="call-recording",
-                region="LA",
-                access_key="LTaGZLxaCHuvzwwwQDTR",
-                secret="ZompCakVzM55vX0Ww0lFPEjwi3QmeDKkJQ7MS6tR",
-                endpoint="https://u5r0.la1.idrivee2-97.com"
+                bucket=os.environ["E2_BUCKET"],
+                region=os.environ["E2_REGION"],
+                access_key=os.environ["E2_ACCESS_KEY"],
+                secret=os.environ["E2_SECRET_KEY"],
+                endpoint=os.environ["E2_ENDPOINT"],
             ),
         )],
     )
@@ -70,33 +70,33 @@ async def entrypoint(ctx: agents.JobContext):
     else:
         print("not egress")
    
-    # ranscript Config
-    async def write_transcript():
-        current_date = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # # ranscript Config
+    # async def write_transcript():
+    #     current_date = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        filename = f"/tmp/transcript_{ctx.room.name}_{current_date}.json"
-        s3_key = f"transcripts/{ctx.room.name}/transcript_{current_date}.json"
+    #     filename = f"/tmp/transcript_{ctx.room.name}_{current_date}.json"
+    #     s3_key = f"transcripts/{ctx.room.name}/transcript_{current_date}.json"
 
         
-        with open(filename, 'w') as f:
-            json.dump(session.history.to_dict(), f, indent=2)
+    #     with open(filename, 'w') as f:
+    #         json.dump(session.history.to_dict(), f, indent=2)
             
-        print(f"Transcript for {ctx.room.name} saved to {filename}")
+    #     print(f"Transcript for {ctx.room.name} saved to {filename}")
 
-        s3 = boto3.client(
-            "s3",
-            aws_access_key_id="VyIg0cmo7HAMwnYvCrnp",
-            aws_secret_access_key="EnjpLkFa1TL00Ylevj6H7SgPCmc1Rwi6Lc8kC73H",
-            region_name="LA",
-            endpoint_url="https://u5r0.la1.idrivee2-97.com",
-            config=Config(signature_version="s3v4"),
-        )
+    #     s3 = boto3.client(
+    #         "s3",
+    #         aws_access_key_id="VyIg0cmo7HAMwnYvCrnp",
+    #         aws_secret_access_key="EnjpLkFa1TL00Ylevj6H7SgPCmc1Rwi6Lc8kC73H",
+    #         region_name="LA",
+    #         endpoint_url="https://u5r0.la1.idrivee2-97.com",
+    #         config=Config(signature_version="s3v4"),
+    #     )
 
-        try:
-            s3.upload_file(filename, "transcripts", s3_key)
-            print(f"Transcript uploaded to {s3_key}")
-        except Exception as e:
-            print(f"Failed to upload transcript: {e}")
+    #     try:
+    #         s3.upload_file(filename, "transcripts", s3_key)
+    #         print(f"Transcript uploaded to {s3_key}")
+    #     except Exception as e:
+    #         print(f"Failed to upload transcript: {e}")
 
     #for session cost
     usage_collector = metrics.UsageCollector()

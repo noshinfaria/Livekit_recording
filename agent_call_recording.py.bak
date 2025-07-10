@@ -25,8 +25,8 @@ class Assistant(Agent):
 
 
 def generate_egress_token():
-    api_key = os.environ["LIVEKIT_EGRESS_API_KEY"]
-    api_secret = os.environ["LIVEKIT_EGRESS_API_SECRET"]
+    api_key = os.environ["LIVEKIT_API_KEY"]
+    api_secret = os.environ["LIVEKIT_API_SECRET"]
     now = int(time.time())
 
     payload = {
@@ -44,7 +44,7 @@ def generate_egress_token():
 # async def start_egress(room_name: str):
 #     token = generate_egress_token()
 
-#     egress_url = os.environ["LIVEKIT_EGRESS_URL"]
+#     egress_url = os.environ["LIVEKIT_URL"]
 #     headers = {
 #         "Authorization": f"Bearer {token}"
 #     }
@@ -84,7 +84,7 @@ def generate_egress_token():
 async def start_egress(room_name: str):
     token = generate_egress_token()
 
-    egress_url =os.environ["LIVEKIT_EGRESS_URL"]
+    egress_url =os.environ["LIVEKIT_URL"]
     headers = {
         "Authorization": f"Bearer {token}"
     }
@@ -124,7 +124,7 @@ async def start_egress(room_name: str):
 
 async def stop_egress(egress_id: str):
     token = generate_egress_token()
-    stop_url = f"{os.environ['LIVEKIT_EGRESS_URL']}/{egress_id}/stop"
+    stop_url = f"{os.environ['LIVEKIT_URL']}/{egress_id}/stop"
 
     headers = {
         "Authorization": f"Bearer {token}"
